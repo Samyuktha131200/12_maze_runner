@@ -3,6 +3,7 @@ import time
 from collections import deque
 from game.maze import generate_maze, CELL
 from game.player import Player
+from game.leaderboard import LEADERBOARD_PATH, load_leaderboard, save_leaderboard, add_time
 
 FPS = 60
 BG = (240, 235, 220)
@@ -25,6 +26,8 @@ class GameEngine:
         self.font = pygame.font.SysFont("monospace", 22)
         self.big_font = pygame.font.SysFont("monospace", 36, bold=True)
         self.fog = pygame.Surface((WIDTH, ROWS*CELL), pygame.SRCALPHA)
+        self.leaderboard_path = LEADERBOARD_PATH
+        self.leaderboard = load_leaderboard(self.leaderboard_path)
         self.reset()
 
     def reset(self):
@@ -35,6 +38,7 @@ class GameEngine:
         self.elapsed = 0
         self.won = False
         self.show_path = False
+        self.new_rank = None  # leaderboard position of this run (None = not in top 5)
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -109,6 +113,12 @@ class GameEngine:
                     self.fog.fill((0, 0, 0, 0), (c*CELL, r*CELL, CELL, CELL))
         self.screen.blit(self.fog, (0, 0))
 
+    def record_time(self):
+        """Add this run's time to the leaderboard (top 5 only) and save it."""
+        self.leaderboard, self.new_rank = add_time(self.leaderboard, self.elapsed)
+        if self.new_rank is not None:
+            save_leaderboard(self.leaderboard, self.leaderboard_path)
+
     def update(self):
         if self.won:
             return
@@ -117,6 +127,16 @@ class GameEngine:
         self.elapsed = time.time() - self.start_time
         if self.player.rect.colliderect(self.exit_rect):
             self.won = True
+            self.record_time()
+
+    def draw_leaderboard(self):
+        """List the top 5 times on the win screen; this run's time is highlighted."""
+        title = self.font.render("Top 5 Times", True, (230, 230, 230))
+        self.screen.blit(title, (WIDTH//2 - title.get_width()//2, ROWS*CELL//2 + 60))
+        for i, t in enumerate(self.leaderboard):
+            color = (255, 215, 0) if i == self.new_rank else (200, 200, 200)
+            row = self.font.render(f"{i+1}. {t:.2f}s", True, color)
+            self.screen.blit(row, (WIDTH//2 - row.get_width()//2, ROWS*CELL//2 + 90 + i*26))
 
     def draw_maze(self):
         wall_w = 3
@@ -153,6 +173,7 @@ class GameEngine:
             sub = self.font.render("Press R for a new maze", True, (200,200,200))
             self.screen.blit(msg, (WIDTH//2 - msg.get_width()//2, ROWS*CELL//2 - 30))
             self.screen.blit(sub, (WIDTH//2 - sub.get_width()//2, ROWS*CELL//2 + 20))
+            self.draw_leaderboard()
         pygame.display.flip()
 
     def run(self):

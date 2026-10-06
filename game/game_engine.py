@@ -9,6 +9,8 @@ BG = (240, 235, 220)
 WALL_COLOR = (40, 40, 60)
 EXIT_COLOR = (80, 200, 80)
 PATH_COLOR = (255, 190, 60, 150)  # RGBA highlight for the shortest-path hint
+FOG_COLOR = (12, 12, 24, 255)     # hidden cells are fully dark
+FOG_RADIUS = 3                    # cells around the player that stay visible
 COLS, ROWS = 15, 13
 
 WIDTH = COLS * CELL
@@ -22,6 +24,7 @@ class GameEngine:
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont("monospace", 22)
         self.big_font = pygame.font.SysFont("monospace", 36, bold=True)
+        self.fog = pygame.Surface((WIDTH, ROWS*CELL), pygame.SRCALPHA)
         self.reset()
 
     def reset(self):
@@ -89,6 +92,23 @@ class GameEngine:
         for r, c in self.find_shortest_path():
             self.screen.blit(tile, (c * CELL, r * CELL))
 
+    def player_cell(self):
+        """The (row, col) cell the player is currently standing in."""
+        return (
+            min(max(self.player.rect.centery // CELL, 0), ROWS - 1),
+            min(max(self.player.rect.centerx // CELL, 0), COLS - 1),
+        )
+
+    def draw_fog(self):
+        """Hide every maze cell farther than FOG_RADIUS cells from the player."""
+        pr, pc = self.player_cell()
+        self.fog.fill(FOG_COLOR)
+        for r in range(max(0, pr - FOG_RADIUS), min(ROWS, pr + FOG_RADIUS + 1)):
+            for c in range(max(0, pc - FOG_RADIUS), min(COLS, pc + FOG_RADIUS + 1)):
+                if (r - pr) ** 2 + (c - pc) ** 2 <= FOG_RADIUS ** 2:
+                    self.fog.fill((0, 0, 0, 0), (c*CELL, r*CELL, CELL, CELL))
+        self.screen.blit(self.fog, (0, 0))
+
     def update(self):
         if self.won:
             return
@@ -117,6 +137,8 @@ class GameEngine:
         ex_label = self.font.render("EXIT", True, (20,80,20))
         self.screen.blit(ex_label, (self.exit_rect.x+2, self.exit_rect.y+4))
         self.player.draw(self.screen)
+        if not self.won:
+            self.draw_fog()
 
         hud = pygame.Rect(0, ROWS*CELL, WIDTH, 60)
         pygame.draw.rect(self.screen, (30,30,50), hud)

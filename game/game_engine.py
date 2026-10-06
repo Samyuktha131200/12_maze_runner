@@ -1,5 +1,6 @@
 import pygame
 import time
+from collections import deque
 from game.maze import generate_maze, CELL
 from game.player import Player
 
@@ -7,6 +8,7 @@ FPS = 60
 BG = (240, 235, 220)
 WALL_COLOR = (40, 40, 60)
 EXIT_COLOR = (80, 200, 80)
+PATH_COLOR = (255, 190, 60, 150)  # RGBA highlight for the shortest-path hint
 COLS, ROWS = 15, 13
 
 WIDTH = COLS * CELL
@@ -29,6 +31,7 @@ class GameEngine:
         self.start_time = time.time()
         self.elapsed = 0
         self.won = False
+        self.show_path = False
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -36,7 +39,55 @@ class GameEngine:
                 return False
             if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
                 self.reset()
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_h:
+                self.show_path = not self.show_path
         return True
+
+    def find_shortest_path(self):
+        """BFS from the player's current cell to the exit cell.
+        Returns a list of (row, col) cells, start to goal (empty if no path)."""
+        start = (
+            min(max(self.player.rect.centery // CELL, 0), ROWS - 1),
+            min(max(self.player.rect.centerx // CELL, 0), COLS - 1),
+        )
+        goal = (ROWS - 1, COLS - 1)
+
+        # walls per cell are [N, S, E, W]; a move is allowed if that wall is down
+        moves = [(-1, 0, 0), (1, 0, 1), (0, 1, 2), (0, -1, 3)]  # dr, dc, wall index
+
+        parent = {start: None}
+        queue = deque([start])
+        while queue:
+            cell = queue.popleft()
+            if cell == goal:
+                break
+            r, c = cell
+            for dr, dc, wall in moves:
+                nr, nc = r + dr, c + dc
+                if (0 <= nr < ROWS and 0 <= nc < COLS
+                        and not self.walls[r][c][wall]
+                        and (nr, nc) not in parent):
+                    parent[(nr, nc)] = cell
+                    queue.append((nr, nc))
+
+        if goal not in parent:
+            return []
+        path = []
+        cell = goal
+        while cell is not None:
+            path.append(cell)
+            cell = parent[cell]
+        path.reverse()
+        return path
+
+    def draw_path(self):
+        """Highlight each cell on the shortest path (only when the hint is on)."""
+        if not self.show_path:
+            return
+        tile = pygame.Surface((CELL, CELL), pygame.SRCALPHA)
+        tile.fill(PATH_COLOR)
+        for r, c in self.find_shortest_path():
+            self.screen.blit(tile, (c * CELL, r * CELL))
 
     def update(self):
         if self.won:
@@ -60,6 +111,7 @@ class GameEngine:
 
     def draw(self):
         self.screen.fill(BG)
+        self.draw_path()
         self.draw_maze()
         pygame.draw.rect(self.screen, EXIT_COLOR, self.exit_rect, border_radius=4)
         ex_label = self.font.render("EXIT", True, (20,80,20))
@@ -68,7 +120,7 @@ class GameEngine:
 
         hud = pygame.Rect(0, ROWS*CELL, WIDTH, 60)
         pygame.draw.rect(self.screen, (30,30,50), hud)
-        time_surf = self.font.render(f"Time: {self.elapsed:.1f}s   R = New Maze", True, (200,200,200))
+        time_surf = self.font.render(f"Time: {self.elapsed:.1f}s   R = New Maze   H = Hint", True, (200,200,200))
         self.screen.blit(time_surf, (10, ROWS*CELL+18))
 
         if self.won:

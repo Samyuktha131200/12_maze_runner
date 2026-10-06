@@ -18,6 +18,7 @@ python main.py
 | A / LEFT | Move left |
 | D / RIGHT | Move right |
 | R | Generate new maze |
+| H | Show / hide shortest path hint |
 
 ## Tasks to Complete
 
